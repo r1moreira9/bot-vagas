@@ -1,0 +1,19 @@
+# === SEGREDOS (nunca subir) ===
+.env
+*.session
+*.session-journal
+ultimo_id.txt
+
+# === Python ===
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# === Editor / sistema ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
