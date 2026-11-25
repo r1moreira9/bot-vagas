@@ -5,7 +5,7 @@ Os exemplos de vaga abaixo são fictícios/anonimizados, no mesmo formato do can
 import pytest
 
 import filtros
-from filtros import avaliar, parse
+from filtros import avaliar, chave, parse
 
 
 def vaga(titulo, nivel=None, local=None, atuacao=None, contrato=None):
@@ -148,8 +148,20 @@ def test_aceitar_estado_sp(monkeypatch):
     monkeypatch.setattr(filtros, "ACEITAR_ESTADO_SP", True)
     assert avaliar(v)[0] is True
 
-def chave(v):
-    """Identifica a vaga (ignora códigos tipo '8475 - ', acentos e pontuação)."""
-    t = re.sub(r"^\d+\s*[-–]\s*", "", norm(v["titulo"]))
-    partes = [t, norm(v["empresa"]), norm(v["local"])]
-    return "|".join(re.sub(r"[^a-z0-9]+", " ", p).strip() for p in partes)
+
+def test_mesma_vaga_gera_mesma_chave():
+    a = vaga("Analista de QA Pleno", "Pleno", "São Paulo, SP", "híbrido")
+    b = vaga("ANALISTA DE QA  PLENO!", "Pleno", "Sao Paulo SP", "remoto")
+    assert chave(a) == chave(b)
+
+
+def test_codigo_no_inicio_do_titulo_e_ignorado():
+    a = vaga("8475 - Analista de QA", "Pleno", "São Paulo")
+    b = vaga("8472 - Analista de QA", "Pleno", "São Paulo")
+    assert chave(a) == chave(b)
+
+
+def test_vagas_diferentes_geram_chaves_diferentes():
+    a = vaga("Analista de QA", "Pleno", "São Paulo")
+    b = vaga("Analista de QA", "Pleno", "Campinas")
+    assert chave(a) != chave(b)
