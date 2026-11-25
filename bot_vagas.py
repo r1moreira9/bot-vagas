@@ -1,13 +1,12 @@
 """Bot que lê um canal de vagas no Telegram e reenvia só as que combinam com o perfil."""
-import os
 import json
+import os
 from datetime import datetime, timedelta, timezone
-import re
 
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 
-from filtros import avaliar, chave, norm, parse
+from filtros import avaliar, chave, parse
 
 load_dotenv()  # lê o arquivo .env (que NÃO vai pro Git)
 
@@ -24,6 +23,7 @@ DIAS_MEMORIA = 30                                 # esquece vagas enviadas há m
 client = TelegramClient("sessao", API_ID, API_HASH)
 destino = "me"
 processadas = set()                               # IDs de mensagens já vistas nesta execução
+separador_enviado = False                         # já avisou o início desta execução?
 
 
 def carregar_enviadas():
@@ -66,6 +66,17 @@ def salvar_ultimo_id(i):
         f.write(str(i))
 
 
+async def enviar_separador(extra=""):
+    global separador_enviado
+    separador_enviado = True
+    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    linhas = ["━━━━━━━━━━━━━━━━━━", f"🔄 Nova execução - {agora}"]
+    if extra:
+        linhas.append(extra)
+    linhas.append("━━━━━━━━━━━━━━━━━━")
+    await client.send_message(destino, "\n".join(linhas))
+
+
 async def processar(msg):
     if msg.id in processadas:        # evita processar a mesma mensagem 2x
         return
@@ -84,6 +95,8 @@ async def processar(msg):
         enviadas[k] = datetime.now(timezone.utc).timestamp()
         salvar_enviadas()
         enviou = True
+        if not separador_enviado:    # separador antes da 1ª vaga desta execução
+            await enviar_separador()
         linhas = [f"🎯 {v['titulo']}"]
         if v["empresa"]:  linhas.append(f"🏢 {v['empresa']}")
         if v["local"]:    linhas.append(f"🌍 {v['local']}")
@@ -121,6 +134,10 @@ async def principal():
     async for msg in client.iter_messages(GRUPO, reverse=True, **filtro):
         await processar(msg)
         maior = max(maior, msg.id)
+
+    if not separador_enviado:        # busca inicial não achou nada para enviar
+        await enviar_separador("😴 Nenhuma vaga nova que combine com o seu perfil")
+
     if not maior:
         ultimas = await client.get_messages(GRUPO, limit=1)
         if ultimas:
@@ -134,4 +151,3 @@ async def principal():
 
 if __name__ == "__main__":
     client.loop.run_until_complete(principal())
-
