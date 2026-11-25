@@ -97,3 +97,9 @@ def avaliar(v):
         avisos.append("sem modelo de atuação (Brasil)")
         return True, avisos
     return False, []
+
+def chave(v):
+    """Identifica a vaga (ignora códigos tipo '8475 - ', acentos e pontuação)."""
+    t = re.sub(r"^\d+\s*[-–]\s*", "", norm(v["titulo"]))
+    partes = [t, norm(v["empresa"]), norm(v["local"])]
+    return "|".join(re.sub(r"[^a-z0-9]+", " ", p).strip() for p in partes)

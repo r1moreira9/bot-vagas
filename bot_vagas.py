@@ -1,11 +1,13 @@
 """Bot que lê um canal de vagas no Telegram e reenvia só as que combinam com o perfil."""
 import os
+import json
 from datetime import datetime, timedelta, timezone
+import re
 
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 
-from filtros import avaliar, parse
+from filtros import avaliar, chave, norm, parse
 
 load_dotenv()  # lê o arquivo .env (que NÃO vai pro Git)
 
@@ -16,8 +18,30 @@ DESTINO = os.getenv("DESTINO", "me")              # grupo de destino ("me" = Men
 DIAS_INICIAIS = int(os.getenv("DIAS_INICIAIS", "2"))
 ARQ_ESTADO = "ultimo_id.txt"                      # guarda até onde já processou
 
+ARQ_ENVIADAS = "vagas_enviadas.json"              # memória das vagas já enviadas
+DIAS_MEMORIA = 30                                 # esquece vagas enviadas há mais de X dias
+
 client = TelegramClient("sessao", API_ID, API_HASH)
 destino = "me"
+processadas = set()                               # IDs de mensagens já vistas nesta execução
+
+
+def carregar_enviadas():
+    try:
+        with open(ARQ_ENVIADAS, encoding="utf-8") as f:
+            dados = json.load(f)
+    except Exception:
+        return {}
+    limite = (datetime.now(timezone.utc) - timedelta(days=DIAS_MEMORIA)).timestamp()
+    return {k: t for k, t in dados.items() if t >= limite}
+
+
+def salvar_enviadas():
+    with open(ARQ_ENVIADAS, "w", encoding="utf-8") as f:
+        json.dump(enviadas, f, ensure_ascii=False)
+
+
+enviadas = carregar_enviadas()
 
 
 async def achar_destino():
@@ -43,6 +67,9 @@ def salvar_ultimo_id(i):
 
 
 async def processar(msg):
+    if msg.id in processadas:        # evita processar a mesma mensagem 2x
+        return
+    processadas.add(msg.id)
     texto = msg.text or ""           # versão markdown (mantém links)
     if "tulo:" not in texto:
         return
@@ -51,6 +78,11 @@ async def processar(msg):
         ok, avisos = avaliar(v)
         if not ok:
             continue
+        k = chave(v)
+        if k in enviadas:            # vaga repetida: ignora
+            continue
+        enviadas[k] = datetime.now(timezone.utc).timestamp()
+        salvar_enviadas()
         enviou = True
         linhas = [f"🎯 {v['titulo']}"]
         if v["empresa"]:  linhas.append(f"🏢 {v['empresa']}")
@@ -102,3 +134,4 @@ async def principal():
 
 if __name__ == "__main__":
     client.loop.run_until_complete(principal())
+

@@ -1,6 +1,6 @@
 # 🎯 Vagas QA Bot
 
-![Testes](https://github.com/SEU_USUARIO/SEU_REPO/actions/workflows/tests.yml/badge.svg)
+![Testes](https://github.com/r1moreira9/bot-vagas.git/actions/workflows/tests.yml/badge.svg)
 
 Bot em Python que lê um canal de vagas no Telegram e reenvia, para um grupo meu,
 **apenas as vagas que combinam com o meu perfil**, sem precisar abrir uma por uma.
