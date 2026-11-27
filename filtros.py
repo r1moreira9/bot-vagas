@@ -13,8 +13,14 @@ CARGOS = [
 ]
 BLOQUEAR_TITULO = [
     "estagio", "estagiario", "trainee", "rater", "assistente",
-    "pcd", "pessoa com deficiencia",
+    "pcd", "pessoa com deficiencia", "hardware",
 ]
+# Palavras no título que indicam nível acima do pleno (usado só quando a vaga não traz o campo Nível)
+TITULO_SENIOR = [
+    "senior", "sr", "lead", "lider", "manager", "gerente", "coordenador", "coordenadora",
+    "head", "principal", "staff", "especialista", "gestor", "gestora",
+]
+
 ACEITAR_ESTADO_SP = False          # True = aceita "Campinas, SP"
 ACEITAR_BRASIL_SEM_MODELO = True   # pleno com "Local: Brasil" e sem atuação
 EXCLUIR_PJ = False                 # True = descarta vagas com "Contrato: PJ"
@@ -74,6 +80,12 @@ def avaliar(v):
 
     eh_remoto = any(t in atuacao or t in local
                     for t in ["remoto", "remote", "home office", "homeoffice"])
+    if not nivel:   # sem o campo Nível: tenta deduzir pelo título
+        if any(palavra(s, titulo) for s in TITULO_SENIOR):
+            return False, []
+        if palavra("pleno", titulo) or palavra("pl", titulo):
+            nivel = "pleno"
+
     eh_pleno, eh_junior = "pleno" in nivel, "junior" in nivel
 
     if nivel:
@@ -98,8 +110,19 @@ def avaliar(v):
         return True, avisos
     return False, []
 
+
 def chave(v):
-    """Identifica a vaga (ignora códigos tipo '8475 - ', acentos e pontuação)."""
+    """Identifica a vaga (ignora códigos tipo '8475 - ', acentos, pontuação e UF/região no local)."""
     t = re.sub(r"^\d+\s*[-–]\s*", "", norm(v["titulo"]))
-    partes = [t, norm(v["empresa"]), norm(v["local"])]
+    local = norm(v["local"]).split(",")[0]
+    local = re.sub(r"\s+e regiao$", "", local)
+    local = re.sub(r"\s+(?:sp|" + "|".join(u.lower() for u in UFS) + r")$", "", local)
+    partes = [t, norm(v["empresa"]), local]
     return "|".join(re.sub(r"[^a-z0-9]+", " ", p).strip() for p in partes)
+
+
+def separar_links(urls):
+    """Separa os links da vaga do perfil de LinkedIn do recrutador."""
+    recrutador = [u for u in urls if "linkedin.com/in/" in u]
+    vaga = [u for u in urls if u not in recrutador]
+    return vaga, recrutador

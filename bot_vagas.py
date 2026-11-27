@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
 
-from filtros import avaliar, chave, parse
+from filtros import avaliar, chave, parse, separar_links
 
 load_dotenv()  # lê o arquivo .env (que NÃO vai pro Git)
 
@@ -77,6 +77,27 @@ async def enviar_separador(extra=""):
     await client.send_message(destino, "\n".join(linhas))
 
 
+def urls_dos_botoes(msg):
+    """Links que ficam em botões abaixo da mensagem (não aparecem no texto)."""
+    urls = []
+    for linha in (msg.buttons or []):
+        for botao in linha:
+            if getattr(botao, "url", None):
+                urls.append(botao.url)
+    return urls
+
+
+async def link_da_mensagem(msg):
+    """Link para o post original no canal (plano B quando a vaga vem sem link)."""
+    try:
+        chat = await msg.get_chat()
+        if getattr(chat, "username", None):
+            return f"https://t.me/{chat.username}/{msg.id}"
+        return f"https://t.me/c/{chat.id}/{msg.id}"
+    except Exception:
+        return ""
+
+
 async def processar(msg):
     if msg.id in processadas:        # evita processar a mesma mensagem 2x
         return
@@ -85,7 +106,9 @@ async def processar(msg):
     if "tulo:" not in texto:
         return
     enviou = False
-    for v in parse(texto):
+    vagas = parse(texto)
+    botoes = urls_dos_botoes(msg) if len(vagas) == 1 else []
+    for v in vagas:
         ok, avisos = avaliar(v)
         if not ok:
             continue
@@ -104,7 +127,14 @@ async def processar(msg):
         if v["nivel"]:    linhas.append(f"🎓 {v['nivel']}")
         if v["contrato"]: linhas.append(f"📄 {v['contrato']}")
         if avisos:        linhas.append("⚠️ " + ", ".join(avisos))
-        linhas += [f"🔗 {u}" for u in v["urls"]]
+        links_vaga, links_recrutador = separar_links(list(dict.fromkeys(v["urls"] + botoes)))
+        linhas += [f"🔗 {u}" for u in links_vaga]
+        if links_recrutador:
+            linhas.append(f"👤 Recrutador: {links_recrutador[0]}")
+        if not links_vaga:           # vaga sem link: aponta para o post original
+            original = await link_da_mensagem(msg)
+            if original:
+                linhas.append(f"📎 Post original: {original}")
         await client.send_message(destino, "\n".join(linhas))
     if enviou:   # encaminha o original: preserva botões e links escondidos
         await client.forward_messages(destino, msg)

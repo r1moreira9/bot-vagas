@@ -5,12 +5,12 @@ Os exemplos de vaga abaixo são fictícios/anonimizados, no mesmo formato do can
 import pytest
 
 import filtros
-from filtros import avaliar, chave, parse
+from filtros import avaliar, chave, parse, separar_links
 
 
-def vaga(titulo, nivel=None, local=None, atuacao=None, contrato=None):
+def vaga(titulo, nivel=None, local=None, atuacao=None, contrato=None, empresa="Empresa X"):
     """Monta o texto de uma vaga no formato do canal e devolve já interpretada."""
-    linhas = ["🚨Nova vaga encontrada🚨", "", f"📜Título: {titulo}", "🏢Empresa: Empresa X"]
+    linhas = ["🚨Nova vaga encontrada🚨", "", f"📜Título: {titulo}", f"🏢Empresa: {empresa}"]
     if local:    linhas.append(f"🌍Local: {local}")
     if atuacao:  linhas.append(f"👨‍💻Atuação: {atuacao}")
     if contrato: linhas.append(f"📄Contrato: {contrato}")
@@ -149,6 +149,8 @@ def test_aceitar_estado_sp(monkeypatch):
     assert avaliar(v)[0] is True
 
 
+# ---------- Vagas repetidas ----------
+
 def test_mesma_vaga_gera_mesma_chave():
     a = vaga("Analista de QA Pleno", "Pleno", "São Paulo, SP", "híbrido")
     b = vaga("ANALISTA DE QA  PLENO!", "Pleno", "Sao Paulo SP", "remoto")
@@ -165,3 +167,57 @@ def test_vagas_diferentes_geram_chaves_diferentes():
     a = vaga("Analista de QA", "Pleno", "São Paulo")
     b = vaga("Analista de QA", "Pleno", "Campinas")
     assert chave(a) != chave(b)
+
+
+# ---------- Nível deduzido pelo título (formato "Segue algumas vagas") ----------
+
+@pytest.mark.parametrize("titulo", [
+    "Senior Manager QA Engineering - Brazil",
+    "QA Engineer Sr",
+    "Quality Assurance Lead",
+    "Coordenador de QA",
+])
+def test_sem_nivel_titulo_senior_e_barrado(titulo):
+    assert avaliar(vaga(titulo))[0] is False
+
+
+def test_sem_nivel_titulo_pleno_e_deduzido():
+    ok, avisos = avaliar(vaga("Analista de QA Pleno", local="São Paulo"))
+    assert ok
+    assert "nível não informado" not in avisos
+
+
+def test_hardware_e_barrado():
+    v = vaga("Product Validation Engineer II: Hardware Verification Quality Assurance (QA)")
+    assert avaliar(v)[0] is False
+
+
+# ---------- Repetidas com pequenas diferenças ----------
+
+def test_mesma_vaga_com_empresa_e_local_levemente_diferentes():
+    a = vaga("Analista de Testes de Software QA | Pleno", "Pleno", "São Paulo", empresa="ADD")
+    b = vaga("Analista de Testes de Software QA | Pleno", "Pleno", "São Paulo, SP", empresa=".add")
+    assert chave(a) == chave(b)
+
+
+def test_sao_paulo_e_regiao_igual_sao_paulo():
+    a = vaga("QA Pleno", "Pleno", "São Paulo e Região")
+    b = vaga("QA Pleno", "Pleno", "São Paulo")
+    assert chave(a) == chave(b)
+
+
+def test_cidades_diferentes_continuam_diferentes():
+    a = vaga("QA Pleno", "Pleno", "São Paulo")
+    b = vaga("QA Pleno", "Pleno", "Porto Alegre")
+    assert chave(a) != chave(b)
+
+
+# ---------- Links ----------
+
+def test_separar_link_da_vaga_do_recrutador():
+    vaga_links, recrutador = separar_links([
+        "https://br.linkedin.com/in/fulano-123",
+        "https://meupadrinho.com.br/vaga/abc",
+    ])
+    assert vaga_links == ["https://meupadrinho.com.br/vaga/abc"]
+    assert recrutador == ["https://br.linkedin.com/in/fulano-123"]
